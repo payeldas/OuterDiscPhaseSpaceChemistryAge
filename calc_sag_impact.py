@@ -9,8 +9,6 @@ import set_values as sv
 import calc_impulse_impact as cii
 import pandas as pd
 import coord_trans as ct
-import scipy.optimize as sciOpt
-import matplotlib.pyplot as plt
 import time
 import agama
 
@@ -20,15 +18,21 @@ IMPACTAGE           = 6
 ZMIN                = 0.6 #kpc
 ZMAX                = 1.  #kpc
 TEST                = True
-NTEST               = 5000
+NTEST               = 10000
 PERTURBMVIR         = 1.e11                     # solar masses
-MVIR_MP_RATIO       = 0.99
-SAGIMPACTWC         = np.array([20., -0.821, -1.397, -45.82, -93.79, 255.52])#np.array([26.270, -0.821, -1.397, -45.82, -93.79, 255.52])
+MVIR_MP_RATIO       = 0.998
+SAGIMPACTWC         = np.array([12., -0.821, -1.397, -45.82, -93.79, 255.52])#np.array([26.270, -0.821, -1.397, -45.82, -93.79, 255.52])
 TRAJSIZE            = 1
 POTFILE             = "../potential_parameters/mcmillan17.ini"
-RUNNO               = 22
+RUNNO               = 84
 RUNFOLDER           = "../results/impactofsag/run"+str(RUNNO)
-PLOTFOLDER          = "../plots/impactofsag/run"+str(RUNNO)
+TEST                = True
+if (TEST):
+    VKICKSOUTPUTFILE    = RUNFOLDER+"/vKicks_test"+str(NTEST)+".csv"
+    EVOLVEDDFOUTPUTFILE = RUNFOLDER+"/evolvedDF_test"+str(NTEST)+".csv"
+else:
+    VKICKSOUTPUTFILE    = RUNFOLDER+"/vKicks.csv"
+    EVOLVEDDFOUTPUTFILE = RUNFOLDER+"/evolvedDF.csv"
 SAGIMPACTPARSFILE   = RUNFOLDER+"/sagImpactPars.txt"
 if (TEST):
     VKICKSOUTPUTFILE    = RUNFOLDER+"/vKicks_test"+str(NTEST)+".csv"
@@ -36,8 +40,8 @@ if (TEST):
 else:
     VKICKSOUTPUTFILE    = RUNFOLDER+"/vKicks.csv"
     EVOLVEDDFOUTPUTFILE = RUNFOLDER+"/evolvedDF.csv"
-print("Galactocentric R of impact = "+str(np.round(SAGIMPACTWC[0]))+" kpc.")
-print("Galactocentric z of impact = "+str(np.round(SAGIMPACTWC[2]))+" kpc.")
+print("Galactocentric R of impact = "+str(np.round(SAGIMPACTWC[0],3))+" kpc.")
+print("Galactocentric z of impact = "+str(np.round(SAGIMPACTWC[2],3))+" kpc.")
 print("Galactocentric velocity of impact = "+str(np.round(np.sqrt(SAGIMPACTWC[3]**2. + SAGIMPACTWC[4]**2. + SAGIMPACTWC[5]**2.)))+" km/s.")
 
 #%% CALCULATE RS GIVEN PLUMMER SPHERE MASS, VIRIAL RADIUS AND VIRIAL MASS
@@ -58,9 +62,6 @@ if not os.path.exists(RUNFOLDER):
     os.makedirs(RUNFOLDER)
 np.savetxt(SAGIMPACTPARSFILE,np.hstack([PERTURBMVIR,MVIR_MP_RATIO,SAGIMPACTWC,NTEST]))
 
-if not os.path.exists(PLOTFOLDER):
-    os.makedirs(PLOTFOLDER)
-
 """
 #%% CREATE MOCK MILKY WAY GALAXY
 
@@ -68,7 +69,7 @@ if not os.path.exists(PLOTFOLDER):
 agama.setUnits(mass=1,length=1,velocity=1)
 
 # McMillan galaxy potential
-gp  = agama.Potential(POTFILE) 
+gp = agama.Potential(POTFILE) 
 
 # Milky Way distribution function
 # (FUNCTION CALCULATING MILKY WAY DF GIVEN OBSERVED COORDINATES. PARAMETERS FROM
@@ -97,13 +98,11 @@ thin_disk_df = agama.DistributionFunction(**thin_disk_df_dict)
 # Create galaxy model and generate a mock sample
 mwgm = agama.GalaxyModel(gp,thin_disk_df)
 
-#%% PLOT MOCK VELOCITY DISPERSION PROFILE
-
 # Create mock data
 wc,error = mwgm.sample(NMOCK)
 
 np.savetxt("../results/impactofsag/mock_mw_wc.txt",wc)
-"""
+
 #%% Generate robust velocity dispersion profile assuming 0.5 km/s error
 
 # Read in obseved velocity dispersion profiles for young/old stars in outer disk
@@ -182,25 +181,13 @@ for j_R in range(n_R):
     sigz_bin[j_R] = opt_sigz
     n = np.sum(index)
     sigz_err_bin[j_R] = opt_sigz * np.sqrt(1./(2.*n))
+"""
 
-fig,ax = plt.subplots(1,1,figsize=(5,4))  
-ax.errorbar(R_bin,sigz_bin,yerr=sigz_err_bin,linestyle="-",linewidth=2, color="black",label="Before impact")
-ax.errorbar(young_ages_df["R"],young_ages_df["min_sigz"],linestyle="-",linewidth=2,color="gray")
-ax.errorbar(young_ages_df["R"],young_ages_df["max_sigz"],linestyle="-",linewidth=2,color="gray")
-ax.fill_between(young_ages_df["R"],young_ages_df["min_sigz"],young_ages_df["max_sigz"],color="gray",alpha=0.2)
-ax.errorbar(old_ages_df["R"],old_ages_df["min_sigz"],linestyle="-",linewidth=2,color="gray")
-ax.errorbar(old_ages_df["R"],old_ages_df["max_sigz"],linestyle="-",linewidth=2,color="gray")
-ax.fill_between(old_ages_df["R"],old_ages_df["min_sigz"],old_ages_df["max_sigz"],color="gray",alpha=0.5)
-ax.tick_params(axis="x",labelsize=12)
-ax.tick_params(axis="y",labelsize=12)
-ax.set_xlabel(r"$R$ (kpc)",fontsize=16)
-ax.set_ylabel(r"$\sigma_z$ (km/s)",fontsize=16) 
-ax.set_xlim([6.4,13.8])
-ax.set_ylim([10.,40.0])
-ax.legend()
-plt.tight_layout(pad=1)
+#%% CALCULATE KICKS AND PERTURBED COORDINATES. SAVE KICKS TO FILE
 
-#%% CALCULATE KICKS AND PERTURBED COORDINATES. SAVE KICKS TO FILE.
+# Read saved mock galaxy data
+wc = np.loadtxt("../results/impactofsag/mock_mw_wc.txt")
+
 impulseImpact     = cii.CalcImpulseImpact()
 if (TEST):
     if (PERTURBMVIR==0.): # i.e. no kicks
@@ -218,7 +205,6 @@ else:
         vKicksDF.to_csv(VKICKSOUTPUTFILE)
         
 #%% EVOLVE PERTURBED DF FOR A FEW DYNAMICAL TIMESCALES
-
 # Calculate a few dynamical timescales in Gyr at the outer disc
 radius       = 16.    # kpc
 enclosedMass = 1.e10  # Solar masses
@@ -237,74 +223,3 @@ print("...DF evolution took "+str(endTime-startTime)+"s.")
 wc_evolved_DF = pd.DataFrame(wc_evolved,columns=["x (kpc)","y (kpc)","z (kpc)",
                                                  "vx (km/s)","vy (km/s)","vz (km/s)"])
 wc_evolved_DF.to_csv(EVOLVEDDFOUTPUTFILE)
-
-#%% RESELECT STARS BEYOND PLANE AND PLOT NEW VERTICAL VELOCITY DISPERSION PROFILE
-wp_evolved = ct.CartesianToPolar(wc_evolved)
-index = (np.abs(wp_evolved[:,2]) > ZMIN) & (np.abs(wp_evolved[:,2]) < ZMAX)
-wp_evolved_beyond_plane = wp_evolved[index,:]
-print(len(wp_evolved_beyond_plane))
-
-R_evolved_bin        = np.zeros(n_R)
-sigz_evolved_bin     = np.zeros(n_R)
-sigz_err_evolved_bin = np.zeros(n_R)
-
-for j_R in range(n_R):
-        
-    ## OBSERVATIONS
-    # Define R region
-    R_index = ((R_edges[j_R]<wp_evolved_beyond_plane[:,0]) & (wp_evolved_beyond_plane[:,0]<R_edges[j_R+1])) 
-               
-    # Calculate mean vz
-    mean = np.mean(wp_evolved_beyond_plane[R_index,5])
-                
-    # Calculate initial guess for sigz
-    sigma = np.std(wp_evolved_beyond_plane[R_index,5])
-        
-    # Clip velocities beyond three sigma
-    clipped_index = (wp_evolved_beyond_plane[:,5] > (mean-f*sigma)) & (wp_evolved_beyond_plane[:,5] < (mean+f*sigma))
-    index   = clipped_index * R_index
-        
-    n = np.sum(index)
-    print(n)
-    
-    if (n==0):
-        R_evolved_bin[j_R]        = np.nan
-        sigz_evolved_bin[j_R]     = np.nan
-        sigz_err_evolved_bin[j_R] = np.nan
-    else:
-        
-        # Calculate mean radii of clipped velocities
-        R_evolved_bin[j_R] = np.mean(wp_evolved_beyond_plane[index,0])
-        
-        # Recalculate mean
-        mean = np.mean(wp_evolved_beyond_plane[index,5])
-        
-        # Maximise likelihood to find robust measure of observed velocity dispersion
-        opt_sigz = sciOpt.brentq(sigmaObjFunc,intervalMin,intervalMax, 
-                                 args=(wp_evolved_beyond_plane[index,5],wp_evolved_beyond_plane[index,5]*0.+0.5,mean), 
-                                 xtol=2e-12, rtol=8.881784197001252e-16, 
-                                 maxiter=100, full_output=False)
-        sigz_evolved_bin[j_R] = opt_sigz
-
-        sigz_err_evolved_bin[j_R] = opt_sigz * np.sqrt(1./(2.*n))
-        
-#%% CREATE PLOT
-    
-fig,ax = plt.subplots(1,1,figsize=(5,4))  
-ax.errorbar(R_bin,sigz_bin,yerr=sigz_err_bin,linestyle="-",linewidth=2, color="black",label="Before impact")
-ax.errorbar(young_ages_df["R"],young_ages_df["min_sigz"],linestyle="-",linewidth=2,color="gray")
-ax.errorbar(young_ages_df["R"],young_ages_df["max_sigz"],linestyle="-",linewidth=2,color="gray")
-ax.fill_between(young_ages_df["R"],young_ages_df["min_sigz"],young_ages_df["max_sigz"],color="gray",alpha=0.2)
-ax.errorbar(old_ages_df["R"],old_ages_df["min_sigz"],linestyle="-",linewidth=2,color="gray")
-ax.errorbar(old_ages_df["R"],old_ages_df["max_sigz"],linestyle="-",linewidth=2,color="gray")
-ax.fill_between(old_ages_df["R"],old_ages_df["min_sigz"],old_ages_df["max_sigz"],color="gray",alpha=0.5)
-ax.tick_params(axis="x",labelsize=12)
-ax.tick_params(axis="y",labelsize=12)
-ax.set_xlabel(r"$R$ (kpc)",fontsize=16)
-ax.set_ylabel(r"$\sigma_z$ (km/s)",fontsize=16) 
-ax.errorbar(R_evolved_bin,sigz_evolved_bin,yerr=sigz_err_evolved_bin,linestyle="-",linewidth=2, color="red",label="Post impact")
-ax.set_xlim([6.4,13.8])
-ax.set_ylim([10.,40.0])
-ax.legend()
-plt.tight_layout(pad=1)
-plt.savefig(PLOTFOLDER+"sagImpact.png")
